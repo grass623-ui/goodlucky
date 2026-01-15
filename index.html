@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>貨幣試算工具</title>
+    <meta name="theme-color" content="#4A90E2">
+    <style>
+        :root {
+            --primary: #4A90E2; /* 標題藍色 */
+            --accent: #FF9900;  /* 點綴橘色 */
+            --maple-red: #FF4500; /* 楓葉專用紅橘色 */
+            --bg: #f8f9fa;
+            --card: #ffffff;
+            --text: #333;
+        }
+        body { font-family: -apple-system, "微軟正黑體", sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 40px 20px; margin: 0; }
+        .container { width: 100%; max-width: 420px; background: var(--card); padding: 25px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.1); }
+        
+        h2 { 
+            text-align: center; 
+            color: var(--primary); 
+            margin-bottom: 25px; 
+            font-size: 1.6rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .maple-icon {
+            color: var(--maple-red);
+            font-size: 1.8rem;
+            margin-right: 8px;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+        
+        .rate-box { background: #eef6ff; border: 1px solid #d1e6ff; border-radius: 12px; padding: 15px; margin-bottom: 25px; }
+        .rate-label { font-weight: bold; font-size: 0.9rem; color: #2c5282; display: block; margin-bottom: 10px; }
+        .rate-input-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        
+        .quick-rates { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+        .quick-btn { background: #fff; border: 1px solid #cbd5e0; padding: 6px 0; border-radius: 6px; font-size: 0.85rem; cursor: pointer; color: #4a5568; transition: 0.2s; }
+        .quick-btn:hover { border-color: var(--primary); color: var(--primary); background: #f0f7ff; }
+        .quick-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: var(--text); font-size: 1rem; }
+        .input-wrapper { position: relative; }
+        input { width: 100%; padding: 15px; font-size: 1.2rem; border: 2px solid #edf2f7; border-radius: 12px; box-sizing: border-box; transition: 0.2s; }
+        input:focus { border-color: var(--primary); outline: none; background: #fff; box-shadow: 0 0 0 3px rgba(74,144,226,0.1); }
+        .unit { position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: #a0aec0; font-weight: bold; }
+
+        .readable-result { font-size: 0.9rem; color: var(--accent); font-weight: bold; text-align: right; margin-top: 5px; min-height: 1.2em; }
+        
+        .divider { text-align: center; color: #cbd5e0; margin: 10px 0; font-size: 1.5rem; }
+        .btn-copy { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; box-shadow: 0 4px 6px rgba(255,153,0,0.2); }
+        .btn-copy:active { transform: scale(0.98); background: #e68a00; }
+        .btn-copy[disabled] { opacity: 0.75; cursor: not-allowed; transform: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2><span class="maple-icon" aria-hidden="true">🍁</span> Artale 交易計算</h2>
+
+    <div class="rate-box" role="region" aria-labelledby="rateLabel">
+        <label id="rateLabel" class="rate-label" for="rate">設定匯率 (1 : ?)</label>
+        <div class="rate-input-wrap">
+            <span style="font-weight: bold;">1 :</span>
+            <input type="number" id="rate" value="40" step="0.01" min="0" inputmode="decimal" aria-label="匯率 1 比多少" />
+        </div>
+        <div class="quick-rates" id="quickButtons" role="toolbar" aria-label="快速匯率選擇"></div>
+    </div>
+
+    <div class="input-group">
+        <label for="unitA">❄️ 雪 (輸入金額)</label>
+        <div class="input-wrapper">
+            <input type="number" id="unitA" placeholder="0" step="0.01" min="0" inputmode="decimal" aria-label="雪 數量">
+            <span class="unit">雪</span>
+        </div>
+    </div>
+
+    <div class="divider" aria-hidden="true">⇅</div>
+
+    <div class="input-group">
+        <label for="unitB">💰 楓幣 (取得數量)</label>
+        <div class="input-wrapper">
+            <input type="number" id="unitB" placeholder="0" step="0.01" min="0" inputmode="decimal" aria-label="楓幣 數量 (萬)">
+            <span class="unit">萬</span>
+        </div>
+        <div class="readable-result" id="unitBReadable" aria-live="polite">0 億 0 萬</div>
+    </div>
+
+    <button class="btn-copy" id="copyBtn" type="button" aria-label="複製試算結果">貨幣試算</button>
+</div>
+
+<script>
+    const rateEl = document.getElementById('rate');
+    const unitAEl = document.getElementById('unitA');
+    const unitBEl = document.getElementById('unitB');
+    const unitBReadableEl = document.getElementById('unitBReadable');
+    const quickButtonsEl = document.getElementById('quickButtons');
+    const copyBtn = document.getElementById('copyBtn');
+
+    function parseNumber(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function formatLargeNumber(val) {
+        val = parseNumber(val); // val is in 萬 units
+        if (val <= 0) return "0 億 0 萬";
+        const yi = Math.floor(val / 10000); // 1 億 = 10000 萬
+        const wan = val % 10000;
+        const wanStr = (Math.abs(wan - Math.floor(wan)) < 1e-9)
+            ? String(Math.floor(wan))
+            : String(Number(wan.toFixed(2)).toString().replace(/\.\?0+$/, ''));
+        let str = "";
+        if (yi > 0) str += yi + " 億 ";
+        if (wan > 0 || yi === 0) str += wanStr + " 萬";
+        return str;
+    }
+
+    function setActiveQuickButton(btn) {
+        document.querySelectorAll('.quick-btn').forEach(b => {
+            b.classList.remove('active');
+            b.setAttribute('aria-pressed', 'false');
+        });
+        if (btn) {
+            btn.classList.add('active');
+            btn.setAttribute('aria-pressed', 'true');
+        }
+    }
+
+    function generateButtons() {
+        const base = 40;
+        for (let i = -5; i <= 5; i++) {
+            const val = base + (i * 5);
+            const btn = document.createElement('button');
+            btn.className = 'quick-btn';
+            btn.type = 'button';
+            btn.setAttribute('aria-label', `設定匯率 1 比 ${val}`);
+            btn.setAttribute('aria-pressed', (val === 40) ? 'true' : 'false');
+            if (val === 40) btn.classList.add('active');
+            btn.innerText = `1:${val}`;
+            btn.onclick = () => {
+                setActiveQuickButton(btn);
+                rateEl.value = val;
+                calc('unitA');
+            };
+            quickButtonsEl.appendChild(btn);
+        }
+    }
+
+    function calc(source) {
+        const r = parseNumber(rateEl.value);
+        if (r <= 0) {
+            return;
+        }
+        if (source === 'unitA') {
+            const a = parseNumber(unitAEl.value);
+            const b = Math.round((a * r) * 100) / 100;
+            unitBEl.value = b;
+        } else {
+            const b = parseNumber(unitBEl.value);
+            const a = Math.round((b / r) * 100) / 100;
+            unitAEl.value = a;
+        }
+        unitBReadableEl.innerText = formatLargeNumber(unitBEl.value);
+    }
+
+    async function copyTextToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        return new Promise((resolve, reject) => {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                if (ok) resolve();
+                else reject(new Error('execCommand copy failed'));
+            } catch (err) {
+                reject(err);
+            }
+        });
+    }
+
+    function disableButtonTemporarily(btn, text, duration = 1500) {
+        const oldText = btn.innerText;
+        btn.innerText = text;
+        btn.disabled = true;
+        setTimeout(() => {
+            btn.innerText = oldText;
+            btn.disabled = false;
+        }, duration);
+    }
+
+    function copyResult() {
+        if (!unitAEl.value || !unitBEl.value) {
+            alert("請先輸入數值");
+            return;
+        }
+        const text = `貨幣試算 | 比值 1:${rateEl.value} | 數量 ${unitAEl.value} 雪 ⇄ ${unitBReadableEl.innerText}`;
+        disableButtonTemporarily(copyBtn, "複製中...");
+        copyTextToClipboard(text)
+            .then(() => {
+                disableButtonTemporarily(copyBtn, "✅ 已複製試算結果", 1200);
+            })
+            .catch((err) => {
+                console.error("複製失敗:", err);
+                alert("複製失敗，請手動選取並複製。");
+                copyBtn.disabled = false;
+            });
+    }
+
+    rateEl.addEventListener('input', () => calc('unitA'));
+    unitAEl.addEventListener('input', () => calc('unitA'));
+    unitBEl.addEventListener('input', () => calc('unitB'));
+    copyBtn.addEventListener('click', copyResult);
+
+    generateButtons();
+    unitBReadableEl.innerText = formatLargeNumber(unitBEl.value);
+</script>
+
+</body>
+</html>
